@@ -1,0 +1,18 @@
+﻿# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Java/Spring Boot
+target/
+*.jar
+*.war
+.idea/
+*.iml
+
+# Local native run (Kafka binary, H2 db files, process logs)
+.local-infra/
+
+# OS generated files
+.DS_Store
+Thumbs.db
