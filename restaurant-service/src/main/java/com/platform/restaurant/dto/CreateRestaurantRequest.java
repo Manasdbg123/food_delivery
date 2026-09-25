@@ -17,6 +17,10 @@ public record CreateRestaurantRequest(
         @Positive(message = "Average delivery time must be positive")
         Integer avgDeliveryTimeMinutes,
 
-        String imageUrl
+        String imageUrl,
+        String area,
+        @Positive(message = "Cost for two must be positive")
+        Integer costForTwo,
+        Boolean veg
 ) {
 }

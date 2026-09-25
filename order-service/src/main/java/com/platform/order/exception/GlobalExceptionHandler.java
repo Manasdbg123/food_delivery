@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -25,6 +26,12 @@ public class GlobalExceptionHandler {
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining(", "));
         return build(HttpStatus.BAD_REQUEST, message.isBlank() ? "Validation failed" : message, request);
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ApiError> handleMissingUser(MissingRequestHeaderException ex, HttpServletRequest request) {
+        // X-User-Id is set by the gateway after verifying the JWT; without it the caller is anonymous.
+        return build(HttpStatus.UNAUTHORIZED, "Sign in to continue", request);
     }
 
     @ExceptionHandler(IllegalStateException.class)

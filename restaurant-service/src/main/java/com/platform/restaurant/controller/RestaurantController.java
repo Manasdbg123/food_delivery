@@ -4,9 +4,9 @@ import com.platform.restaurant.dto.CreateRestaurantRequest;
 import com.platform.restaurant.entity.Restaurant;
 import com.platform.restaurant.exception.ResourceNotFoundException;
 import com.platform.restaurant.repository.RestaurantRepository;
+import com.platform.restaurant.service.RestaurantQueryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +20,7 @@ import java.util.Map;
 public class RestaurantController {
 
     private final RestaurantRepository repository;
+    private final RestaurantQueryService restaurants;
 
     @GetMapping
     public ResponseEntity<List<Restaurant>> getRestaurants(@RequestParam(required = false) String city) {
@@ -30,11 +31,8 @@ public class RestaurantController {
     }
 
     @GetMapping("/{id}")
-    @Cacheable(value = "restaurants", key = "#id")
     public ResponseEntity<Restaurant> getRestaurant(@PathVariable Long id) {
-        Restaurant restaurant = repository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found with id: " + id));
-        return ResponseEntity.ok(restaurant);
+        return ResponseEntity.ok(restaurants.byId(id));
     }
 
     @GetMapping("/{id}/status")
@@ -53,6 +51,9 @@ public class RestaurantController {
         restaurant.setAddress(request.address());
         restaurant.setAvgDeliveryTimeMinutes(request.avgDeliveryTimeMinutes());
         restaurant.setImageUrl(request.imageUrl());
+        restaurant.setArea(request.area());
+        restaurant.setCostForTwo(request.costForTwo());
+        restaurant.setVeg(Boolean.TRUE.equals(request.veg()));
         restaurant.setRating(0.0);
         restaurant.setIsOpen(true);
         Restaurant saved = repository.save(restaurant);

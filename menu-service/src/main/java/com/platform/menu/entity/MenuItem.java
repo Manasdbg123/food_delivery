@@ -28,6 +28,9 @@ public class MenuItem {
     private Boolean isVeg = true;
 
     private String imageUrl;
+    /** Menu section, e.g. "Biryani" or "Desserts". */
+    private String category;
+    private Boolean bestseller = false;
 
     @Column(name = "is_available")
     private Boolean isAvailable = true;
