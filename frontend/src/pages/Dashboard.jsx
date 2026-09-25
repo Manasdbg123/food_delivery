@@ -1,105 +1,145 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, Search as SearchIcon, SlidersHorizontal } from 'lucide-react';
 import { useLocationState } from '../context/LocationContext';
+import { getRestaurants } from '../services/catalog';
+import { CUISINES } from '../data/catalog';
+import { COUPONS } from '../lib/pricing';
+import RestaurantCard from '../components/RestaurantCard';
+import { EmptyState, Notice, RestaurantSkeleton } from '../components/ui';
+import { clsx } from '../lib/format';
 
-const FALLBACK_RESTAURANTS = [
-  { id: 1, city: "Bangalore", name: "Meghana Foods", cuisine: "Biryani, Andhra", rating: 4.5, avgDeliveryTimeMinutes: 30, imageUrl: "https://images.unsplash.com/photo-1631515243349-e0cb75fb8d3a?w=500" },
-  { id: 2, city: "Bangalore", name: "Truffles", cuisine: "Burgers, American", rating: 4.4, avgDeliveryTimeMinutes: 35, imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500" },
-  { id: 3, city: "Bangalore", name: "Rameshwaram Cafe", cuisine: "South Indian", rating: 4.6, avgDeliveryTimeMinutes: 40, imageUrl: "https://images.unsplash.com/photo-1589301760014-d929f39ce9b1?w=500" },
-  { id: 4, city: "Mumbai", name: "Leopold Cafe", cuisine: "Continental, Desserts", rating: 4.3, avgDeliveryTimeMinutes: 25, imageUrl: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500" },
-  { id: 5, city: "Mumbai", name: "Bademiya", cuisine: "Kebabs, Mughlai", rating: 4.2, avgDeliveryTimeMinutes: 45, imageUrl: "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?w=500" },
-  { id: 6, city: "Mumbai", name: "Britannia & Co.", cuisine: "Parsi, Biryani", rating: 4.5, avgDeliveryTimeMinutes: 30, imageUrl: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500" },
-  { id: 7, city: "Delhi", name: "Karim's", cuisine: "Mughlai, North Indian", rating: 4.7, avgDeliveryTimeMinutes: 40, imageUrl: "https://images.unsplash.com/photo-1610970881699-44a5587cbd0f?w=500" },
-  { id: 8, city: "Delhi", name: "Bukhara", cuisine: "North Indian", rating: 4.8, avgDeliveryTimeMinutes: 50, imageUrl: "https://images.unsplash.com/photo-1606755962773-d324e0a13086?w=500" },
-  { id: 9, city: "Delhi", name: "Big Chill", cuisine: "Italian, Desserts", rating: 4.6, avgDeliveryTimeMinutes: 35, imageUrl: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500" },
-  { id: 10, city: "Hyderabad", name: "Paradise Biryani", cuisine: "Biryani, Hyderabadi", rating: 4.1, avgDeliveryTimeMinutes: 30, imageUrl: "https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=500" },
-  { id: 11, city: "Hyderabad", name: "Bawarchi", cuisine: "Biryani, North Indian", rating: 4.3, avgDeliveryTimeMinutes: 35, imageUrl: "https://images.unsplash.com/photo-1563379926898-05f4575a45d8?w=500" },
-  { id: 12, city: "Hyderabad", name: "Cafe Bahar", cuisine: "Biryani, Desserts", rating: 4.4, avgDeliveryTimeMinutes: 25, imageUrl: "https://images.unsplash.com/photo-1589301760014-d929f39ce9b1?w=500" },
-  { id: 13, city: "Chennai", name: "Murugan Idli Shop", cuisine: "South Indian", rating: 4.5, avgDeliveryTimeMinutes: 20, imageUrl: "https://images.unsplash.com/photo-1610192244261-3f33de3f55e4?w=500" },
-  { id: 14, city: "Chennai", name: "Anjappar", cuisine: "Chettinad, Biryani", rating: 4.2, avgDeliveryTimeMinutes: 40, imageUrl: "https://images.unsplash.com/photo-1631515243349-e0cb75fb8d3a?w=500" },
-  { id: 15, city: "Chennai", name: "Saravana Bhavan", cuisine: "South Indian, Pure Veg", rating: 4.4, avgDeliveryTimeMinutes: 25, imageUrl: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500" }
-];
+const SORTS = {
+  relevance: { label: 'Relevance', fn: () => 0 },
+  rating: { label: 'Rating', fn: (a, b) => b.rating - a.rating },
+  time: { label: 'Delivery time', fn: (a, b) => a.avgDeliveryTimeMinutes - b.avgDeliveryTimeMinutes },
+  costLow: { label: 'Cost: low to high', fn: (a, b) => (a.costForTwo || 0) - (b.costForTwo || 0) },
+  costHigh: { label: 'Cost: high to low', fn: (a, b) => (b.costForTwo || 0) - (a.costForTwo || 0) },
+};
 
-const SkeletonCard = () => (
-  <div style={{ borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-    <div style={{ width: '100%', height: '182px', backgroundColor: '#eceef1' }} className="animate-pulse" />
-    <div style={{ padding: '14px' }}>
-      <div style={{ height: '18px', width: '70%', backgroundColor: '#eceef1', borderRadius: '4px', marginBottom: '10px' }} className="animate-pulse" />
-      <div style={{ height: '14px', width: '40%', backgroundColor: '#eceef1', borderRadius: '4px' }} className="animate-pulse" />
-    </div>
-  </div>
-);
-
-const Dashboard = () => {
-  const [restaurants, setRestaurants] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [usingFallback, setUsingFallback] = useState(false);
-  const navigate = useNavigate();
+const Home = () => {
   const { city } = useLocationState();
+  const navigate = useNavigate();
+  const [state, setState] = useState({ loading: true, restaurants: [], live: false });
+  const [cuisine, setCuisine] = useState('');
+  const [sort, setSort] = useState('relevance');
+  const [filters, setFilters] = useState({ veg: false, topRated: false, fast: false, offers: false });
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-
-    fetch(`/api/v1/restaurants?city=${encodeURIComponent(city)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error('Request failed');
-        return res.json();
-      })
-      .then((data) => {
-        if (cancelled) return;
-        if (Array.isArray(data) && data.length > 0) {
-          setRestaurants(data);
-          setUsingFallback(false);
-        } else {
-          setRestaurants(FALLBACK_RESTAURANTS.filter((r) => r.city === city));
-          setUsingFallback(true);
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setRestaurants(FALLBACK_RESTAURANTS.filter((r) => r.city === city));
-        setUsingFallback(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => { cancelled = true; };
+    const controller = new AbortController();
+    setState((s) => ({ ...s, loading: true }));
+    getRestaurants(city, { signal: controller.signal })
+      .then(({ data, live }) => setState({ loading: false, restaurants: data, live }))
+      .catch((err) => err.name !== 'AbortError' && setState({ loading: false, restaurants: [], live: false }));
+    return () => controller.abort();
   }, [city]);
 
-  return (
-    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '8px', color: '#1c1c1c' }}>Restaurants with online food delivery in {city}</h2>
-      {usingFallback && !loading && (
-        <p style={{ color: '#a3a3a3', fontSize: '13px', marginBottom: '20px' }}>Showing sample listings — live restaurant data is unavailable right now.</p>
-      )}
-      {!usingFallback && <div style={{ marginBottom: '25px' }} />}
+  const visible = useMemo(() => state.restaurants
+    .filter((r) => !cuisine || (r.cuisine || '').toLowerCase().includes(cuisine.toLowerCase()))
+    .filter((r) => !filters.veg || r.veg)
+    .filter((r) => !filters.topRated || r.rating >= 4.5)
+    .filter((r) => !filters.fast || r.avgDeliveryTimeMinutes <= 30)
+    .filter((r) => !filters.offers || r.offer)
+    .sort(SORTS[sort].fn), [state.restaurants, cuisine, filters, sort]);
 
-      {loading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '32px' }}>
-          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+  const toggle = (key) => setFilters((f) => ({ ...f, [key]: !f[key] }));
+  const anyFilter = cuisine || Object.values(filters).some(Boolean);
+
+  return (
+    <>
+      <section className="relative overflow-hidden bg-ink text-white">
+        <div className="absolute inset-0 opacity-40" style={{ background: 'radial-gradient(900px 400px at 85% -10%, #fc5a12 0%, transparent 60%), radial-gradient(600px 300px at 0% 120%, #ff7a37 0%, transparent 60%)' }} />
+        <div className="container-page relative grid gap-8 py-14 md:grid-cols-[1.2fr_1fr] md:items-center md:py-20">
+          <div>
+            <p className="eyebrow text-brand-300">Delivering in {city}</p>
+            <h1 className="mt-3 text-4xl font-extrabold leading-[1.05] text-white sm:text-5xl">
+              Hungry? Your favourite kitchen is a few taps away.
+            </h1>
+            <p className="mt-4 max-w-lg text-lg text-stone-300">Order from {state.restaurants.length || 'top'} restaurants near you and follow your order from the kitchen to your door.</p>
+            <form
+              className="mt-8 flex max-w-lg items-center gap-2 rounded-2xl bg-white p-2 shadow-lift"
+              onSubmit={(e) => { e.preventDefault(); navigate(`/search?q=${encodeURIComponent(query)}`); }}
+            >
+              <SearchIcon size={20} className="ml-2 shrink-0 text-ink-muted" />
+              <input
+                value={query} onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search for biryani, dosa or a restaurant"
+                className="min-w-0 flex-1 bg-transparent px-1 py-2 text-ink placeholder:text-stone-400 focus:outline-none"
+                aria-label="Search restaurants and dishes"
+              />
+              <button className="btn-primary shrink-0">Search</button>
+            </form>
+          </div>
+          <div className="hidden gap-3 md:grid">
+            {COUPONS.slice(0, 3).map((c, i) => (
+              <Link key={c.code} to="/offers" className="animate-fade-up rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur transition hover:bg-white/10" style={{ animationDelay: `${i * 80}ms` }}>
+                <p className="text-lg font-bold text-white">{c.title}</p>
+                <p className="text-sm text-stone-300">{c.detail} · use <span className="font-mono font-bold text-brand-300">{c.code}</span></p>
+              </Link>
+            ))}
+          </div>
         </div>
-      ) : restaurants.length === 0 ? (
-        <p style={{ color: '#686b78' }}>No restaurants found in this city yet.</p>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '32px' }}>
-          {restaurants.map((res) => (
-            <div key={res.id} onClick={() => navigate(`/restaurant/${res.id}`, { state: res })} style={{ cursor: 'pointer', transition: 'transform 0.2s', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(0.98)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}>
-              <img src={res.imageUrl || res.img} alt={res.name} style={{ width: '100%', height: '182px', objectFit: 'cover' }} />
-              <div style={{ padding: '14px' }}>
-                <h3 style={{ margin: '0 0 6px 0', fontSize: '18px', color: '#2b2b2b' }}>{res.name}</h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 'bold', color: '#505050' }}>
-                  <span style={{ backgroundColor: '#25a044', color: 'white', padding: '3px 6px', borderRadius: '6px', fontSize: '12px' }}>★ {res.rating}</span>
-                  <span>• {res.avgDeliveryTimeMinutes ?? res.time} min</span>
-                </div>
-                <p style={{ margin: '8px 0 0 0', color: '#707070', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{res.cuisine}</p>
-              </div>
+      </section>
+
+      <div className="container-page py-10">
+        <section aria-labelledby="cuisines-title">
+          <h2 id="cuisines-title" className="text-2xl font-extrabold">What's on your mind?</h2>
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+            <button className={clsx('chip', !cuisine && 'chip-active')} onClick={() => setCuisine('')}>All</button>
+            {CUISINES.map((c) => (
+              <button key={c} className={clsx('chip', cuisine === c && 'chip-active')} onClick={() => setCuisine(cuisine === c ? '' : c)}>{c}</button>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-8" aria-labelledby="list-title">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 id="list-title" className="text-2xl font-extrabold">Restaurants delivering in {city}</h2>
+              {!state.loading && <p className="mt-1 text-sm text-ink-muted">{visible.length} of {state.restaurants.length} shown</p>}
             </div>
-          ))}
-        </div>
-      )}
-    </div>
+            <label className="flex items-center gap-2 text-sm font-semibold text-ink-soft">
+              <SlidersHorizontal size={16} /> Sort
+              <select value={sort} onChange={(e) => setSort(e.target.value)} className="input w-auto py-2">
+                {Object.entries(SORTS).map(([key, { label }]) => <option key={key} value={key}>{label}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {[['veg', 'Pure veg'], ['topRated', 'Rated 4.5+'], ['fast', 'Under 30 min'], ['offers', 'Offers']].map(([key, label]) => (
+              <button key={key} className={clsx('chip', filters[key] && 'chip-active')} onClick={() => toggle(key)} aria-pressed={filters[key]}>{label}</button>
+            ))}
+          </div>
+
+          {!state.loading && !state.live && (
+            <div className="mt-5"><Notice>Showing sample restaurants. Start the backend to see live listings from restaurant-service.</Notice></div>
+          )}
+
+          <div className="mt-6 grid gap-x-6 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
+            {state.loading
+              ? Array.from({ length: 6 }, (_, i) => <RestaurantSkeleton key={i} />)
+              : visible.map((r, i) => <RestaurantCard key={r.id} restaurant={r} index={i} />)}
+          </div>
+
+          {!state.loading && visible.length === 0 && (
+            <EmptyState
+              icon={<SearchIcon size={28} />}
+              title={anyFilter ? 'No restaurants match these filters' : `No restaurants in ${city} yet`}
+              action={anyFilter && (
+                <button className="btn-secondary" onClick={() => { setCuisine(''); setFilters({ veg: false, topRated: false, fast: false, offers: false }); }}>
+                  Clear filters <ArrowRight size={16} />
+                </button>
+              )}
+            >
+              {anyFilter ? 'Try removing a filter to see more places.' : 'Pick another city from the location menu.'}
+            </EmptyState>
+          )}
+        </section>
+      </div>
+    </>
   );
 };
-export default Dashboard;
+
+export default Home;
