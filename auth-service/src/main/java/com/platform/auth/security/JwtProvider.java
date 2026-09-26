@@ -10,7 +10,7 @@ import java.util.Date;
 
 @Component
 public class JwtProvider {
-    @Value("${jwt.secret:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}")
+    @Value("${jwt.secret}")
     private String jwtSecret;
 
     public String generateToken(String email, String role, String userId) {
