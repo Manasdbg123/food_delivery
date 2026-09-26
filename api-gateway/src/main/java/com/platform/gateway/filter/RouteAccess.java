@@ -17,6 +17,9 @@ public final class RouteAccess {
     private static final List<String> PUBLIC_ANY_METHOD = List.of(
             "/api/v1/auth/register",
             "/api/v1/auth/login",
+            // Stripe calls this, not a signed-in user. payment-service verifies the
+            // Stripe-Signature header over the raw body before trusting anything in it.
+            "/api/v1/payments/webhook",
             "/eureka");
 
     private static final List<String> PUBLIC_READ_ONLY = List.of(
@@ -29,6 +32,9 @@ public final class RouteAccess {
     public static boolean isPublic(HttpMethod method, String path) {
         if (path == null) {
             return false;
+        }
+        if (HttpMethod.OPTIONS.equals(method)) {
+            return true; // CORS preflight carries no credentials by design
         }
         if (PUBLIC_ANY_METHOD.stream().anyMatch(prefix -> matches(path, prefix))) {
             return true;

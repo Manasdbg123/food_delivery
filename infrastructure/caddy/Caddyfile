@@ -1,0 +1,6 @@
+# Terminates HTTPS for DOMAIN (certificates are issued and renewed automatically)
+# and forwards everything to the storefront container, which proxies /api onward.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy frontend:80
+}

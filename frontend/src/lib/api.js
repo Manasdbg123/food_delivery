@@ -2,6 +2,8 @@
 // bodies into readable messages, and tells the app when a session has expired.
 
 const TOKEN_KEY = 'token';
+// Empty means same origin: the Vite dev proxy or the production nginx forwards /api.
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 export class ApiError extends Error {
   constructor(message, status, { offline = false } = {}) {
@@ -23,7 +25,7 @@ export async function api(path, { method = 'GET', body, auth = true, signal } = 
 
   let res;
   try {
-    res = await fetch(`/api/v1${path}`, {
+    res = await fetch(`${API_BASE}/api/v1${path}`, {
       method, headers, signal, body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (err) {

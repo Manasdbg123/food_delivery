@@ -8,7 +8,10 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
-        changeOrigin: true
+        changeOrigin: true,
+        // Same reason as the production nginx: to the browser this is same-origin, so
+        // the gateway's CORS rules must not see the dev server's Origin header.
+        configure: (proxy) => proxy.on('proxyReq', (req) => req.removeHeader('origin'))
       }
     }
   }

@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { placeOrder } from '../services/orders';
+import { payForOrder } from '../services/payments';
 import { COUPONS, FREE_DELIVERY_ABOVE, couponProblem, findCoupon } from '../lib/pricing';
 import { EmptyState, QtyStepper, SmartImage, VegMark } from '../components/ui';
 import { clsx, inr } from '../lib/format';
@@ -75,6 +76,17 @@ const Cart = () => {
         bill,
       });
       cart.clear();
+      if (!order.demo && payment !== 'COD') {
+        // The order exists now; paying is the next step. If the payment page cannot be
+        // opened, the order page offers "Pay now" so nothing is lost.
+        try {
+          if (await payForOrder(order.id)) return;
+        } catch (err) {
+          showToast(err.message || 'Your order is saved. Finish paying from the order page.', 'error');
+          navigate(`/orders/${order.id}`, { replace: true });
+          return;
+        }
+      }
       showToast(order.demo ? 'Order placed in demo mode' : 'Order placed', 'success');
       navigate(`/orders/${order.id}`, { replace: true });
     } catch (err) {
@@ -130,7 +142,9 @@ const Cart = () => {
                 </label>
               ))}
             </div>
-            <p className="mt-3 flex items-center gap-2 text-sm text-ink-muted"><ShieldCheck size={16} className="text-emerald-600" /> Payment is confirmed by payment-service before the restaurant starts cooking.</p>
+            <p className="mt-3 flex items-center gap-2 text-sm text-ink-muted"><ShieldCheck size={16} className="shrink-0 text-emerald-600" /> {payment === 'COD'
+              ? 'Pay the delivery partner in cash or UPI when your food arrives.'
+              : 'You pay on a secure Stripe checkout page. Card details never touch our servers, and the restaurant starts cooking once the payment is confirmed.'}</p>
           </section>
         </div>
 
@@ -193,7 +207,7 @@ const Cart = () => {
 
           {isAuthenticated ? (
             <button className="btn-primary btn-lg mt-5 w-full bg-emerald-600 hover:bg-emerald-700" onClick={submit} disabled={placing}>
-              {placing ? 'Placing your order…' : `Place order · ${inr(bill.total)}`}
+              {placing ? 'Placing your order…' : payment === 'COD' ? `Place order · ${inr(bill.total)}` : `Proceed to pay · ${inr(bill.total)}`}
             </button>
           ) : (
             <Link to="/login" state={{ from: { pathname: '/cart' } }} className="btn-primary btn-lg mt-5 w-full">Sign in to place your order</Link>
