@@ -2,7 +2,7 @@ version: '3.8'
 
 x-db-env: &db-env
   DB_USERNAME: root
-  DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-manas@9546}
+  DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-password}
 
 x-common-env: &common-env
   EUREKA_URI: http://discovery-server:8761/eureka/
@@ -14,13 +14,13 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-manas@9546}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-password}
       MYSQL_DATABASE: user_db
     volumes:
       - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-manas@9546}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-password}"]
       interval: 10s
       timeout: 5s
       retries: 10

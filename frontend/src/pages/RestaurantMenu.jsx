@@ -1,98 +1,165 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { ArrowRight, Clock, IndianRupee, MapPin, Search, ShoppingBag, Sparkles } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
-import { PhoneCall } from 'lucide-react';
-
-const MOCK_MENUS = {
-  1: [{ id: 101, name: "Chicken Boneless Biryani", price: 340, v: false }, { id: 102, name: "Special Egg Biryani", price: 270, v: false }, { id: 103, name: "Paneer Tikka Biryani", price: 290, v: true }],
-  8: [{ id: 801, name: "Ghee Podi Roast Dosa", price: 140, v: true }, { id: 802, name: "Traditional Thatte Idli", price: 70, v: true }]
-};
+import { getMenu, getRestaurant } from '../services/catalog';
+import { EmptyState, Modal, Notice, QtyStepper, Rating, SmartImage, VegMark } from '../components/ui';
+import { clsx, inr } from '../lib/format';
 
 const RestaurantMenu = () => {
-  const { state } = useLocation();
   const { id } = useParams();
-  const navigate = useNavigate();
-  const { addToCart, replaceCart } = useCart();
+  const cart = useCart();
   const { showToast } = useToast();
-  const [pendingItem, setPendingItem] = useState(null);
-  const [items, setItems] = useState(MOCK_MENUS[id] || [{ id: 991, name: "Signature House Special", price: 299, v: true }]);
+  const [restaurant, setRestaurant] = useState(null);
+  const [menu, setMenu] = useState({ items: [], live: false });
   const [loading, setLoading] = useState(true);
+  const [vegOnly, setVegOnly] = useState(false);
+  const [query, setQuery] = useState('');
+  const [pending, setPending] = useState(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
-    fetch(`/api/v1/menus/restaurant/${id}`)
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data) => {
-        if (cancelled) return;
-        if (Array.isArray(data) && data.length > 0) {
-          setItems(data.map((m) => ({ id: m.id, name: m.name, price: m.price, v: m.isVeg })));
-        }
+    Promise.all([getRestaurant(id, controller), getMenu(id, controller)])
+      .then(([r, m]) => {
+        setRestaurant(r.data);
+        setMenu({ items: m.data, live: m.live && r.live });
       })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => !controller.signal.aborted && setLoading(false));
+    return () => controller.abort();
   }, [id]);
 
-  const handleAdd = (item) => {
-    const result = addToCart(item, state?.id, state?.name);
-    if (result === 'conflict') {
-      setPendingItem(item);
-    } else {
-      showToast(`${item.name} added to cart`, 'success');
+  const sections = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const items = menu.items
+      .filter((i) => !vegOnly || i.isVeg)
+      .filter((i) => !q || i.name.toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q));
+    const groups = new Map();
+    const best = items.filter((i) => i.bestseller);
+    if (best.length && !q) groups.set('Bestsellers', best);
+    for (const item of items) {
+      const key = item.category || 'Menu';
+      groups.set(key, [...(groups.get(key) || []), item]);
     }
+    return [...groups.entries()];
+  }, [menu.items, vegOnly, query]);
+
+  if (loading) {
+    return (
+      <div className="container-page max-w-4xl py-8">
+        <div className="skeleton h-48 w-full rounded-3xl" />
+        <div className="mt-6 space-y-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className="skeleton h-24" />)}</div>
+      </div>
+    );
+  }
+
+  if (!restaurant) {
+    return <EmptyState title="Restaurant not found" action={<Link to="/" className="btn-primary">Browse restaurants</Link>}>It may have closed or moved.</EmptyState>;
+  }
+
+  const add = (item) => {
+    if (cart.add(item, restaurant) === 'conflict') setPending(item);
+    else showToast(`${item.name} added to your cart`, 'success', 1800);
   };
 
-  const confirmReplace = () => {
-    replaceCart(pendingItem, state?.id, state?.name);
-    showToast(`Cart cleared — ${pendingItem.name} added`, 'info');
-    setPendingItem(null);
-  };
+  const inThisCart = cart.restaurant?.id === restaurant.id && cart.itemCount > 0;
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      {state && (
-        <div style={{ borderBottom: '1px dashed #d4d5d9', paddingBottom: '20px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h1 style={{ margin: '0 0 10px 0', fontSize: '32px', color: '#282c3f' }}>{state.name}</h1>
-            <p style={{ color: '#686b78', margin: '0 0 5px 0' }}>{state.cuisine}</p>
-            <p style={{ color: '#686b78', margin: '0', fontWeight: 'bold' }}>{state.avgDeliveryTimeMinutes ?? state.time} min | ★ {state.rating}</p>
+    <div className="container-page max-w-4xl pb-32 pt-6">
+      <nav className="mb-4 text-sm text-ink-muted" aria-label="Breadcrumb">
+        <Link to="/" className="hover:text-ink">Home</Link> / <span>{restaurant.city}</span> / <span className="text-ink">{restaurant.name}</span>
+      </nav>
+
+      <header className="card overflow-hidden">
+        <div className="grid sm:grid-cols-[1fr_260px]">
+          <div className="p-6">
+            <h1 className="text-3xl font-extrabold">{restaurant.name}</h1>
+            <p className="mt-1 text-ink-muted">{restaurant.cuisine}</p>
+            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+              <Rating value={restaurant.rating} count={restaurant.ratingCount} />
+              <span className="inline-flex items-center gap-1.5 font-semibold"><Clock size={15} /> {restaurant.avgDeliveryTimeMinutes} min</span>
+              {restaurant.costForTwo && <span className="inline-flex items-center gap-1 font-semibold"><IndianRupee size={14} />{restaurant.costForTwo} for two</span>}
+              <span className="inline-flex items-center gap-1.5 text-ink-muted"><MapPin size={15} /> {restaurant.area || restaurant.address || restaurant.city}</span>
+            </div>
+            {restaurant.offer && (
+              <p className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand-50 px-3 py-2 text-sm font-bold text-brand-700">
+                <Sparkles size={15} /> {restaurant.offer}
+              </p>
+            )}
           </div>
-          {/* Functional Contact Restaurant Button */}
-          <button onClick={() => showToast(`Dialing ${state.name}...`, 'info')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', backgroundColor: '#fff', border: '1px solid #fc8019', color: '#fc8019', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
-            <PhoneCall size={18} /> Contact Restaurant
+          <SmartImage src={restaurant.imageUrl} alt={restaurant.name} className="hidden h-full w-full sm:block" />
+        </div>
+      </header>
+
+      {!menu.live && <div className="mt-4"><Notice>This is the sample menu. Prices and availability come from menu-service when the backend is running.</Notice></div>}
+
+      <div className="sticky top-16 z-10 -mx-4 mt-6 flex flex-wrap items-center gap-3 bg-stone-50/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-2xl">
+        <label className="relative min-w-[200px] flex-1">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-muted" />
+          <input className="input pl-10" placeholder="Search the menu" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search the menu" />
+        </label>
+        {!restaurant.veg && (
+          <button className={clsx('chip', vegOnly && 'border-veg bg-green-50 text-veg')} onClick={() => setVegOnly((v) => !v)} aria-pressed={vegOnly}>
+            <VegMark isVeg /> Veg only
           </button>
+        )}
+      </div>
+
+      {sections.length === 0 && <EmptyState title="Nothing matches">Try another dish name{vegOnly ? ' or turn off Veg only' : ''}.</EmptyState>}
+
+      {sections.map(([title, items]) => (
+        <section key={title} className="mt-8" aria-labelledby={`sec-${title}`}>
+          <h2 id={`sec-${title}`} className="text-xl font-extrabold">{title} <span className="font-semibold text-ink-muted">({items.length})</span></h2>
+          <ul className="mt-2 divide-y divide-stone-200">
+            {items.map((item) => {
+              const qty = cart.restaurant?.id === restaurant.id ? cart.quantityOf(item.id) : 0;
+              return (
+                <li key={`${title}-${item.id}`} className="flex gap-6 py-6">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <VegMark isVeg={item.isVeg} />
+                      {item.bestseller && <span className="text-xs font-bold text-brand-600">★ Bestseller</span>}
+                    </div>
+                    <h3 className="mt-1.5 text-lg font-bold">{item.name}</h3>
+                    <p className="font-semibold">{inr(item.price)}</p>
+                    {item.description && <p className="mt-2 line-clamp-2 text-sm text-ink-muted">{item.description}</p>}
+                  </div>
+                  <div className="flex w-32 shrink-0 flex-col items-center justify-center gap-2">
+                    {qty > 0
+                      ? <QtyStepper qty={qty} onChange={(n) => cart.setQty(item.id, n)} />
+                      : <button onClick={() => add(item)} className="h-10 w-full rounded-xl border border-stone-300 bg-white text-sm font-extrabold text-emerald-700 shadow-sm transition hover:bg-emerald-50">ADD</button>}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
+
+      {inThisCart && (
+        <div className="fixed inset-x-0 bottom-0 z-20 p-4">
+          <Link to="/cart" className="mx-auto flex max-w-4xl animate-fade-up items-center justify-between rounded-2xl bg-emerald-600 px-5 py-4 font-bold text-white shadow-lift hover:bg-emerald-700">
+            <span className="inline-flex items-center gap-2"><ShoppingBag size={18} /> {cart.itemCount} item{cart.itemCount > 1 ? 's' : ''} · {inr(cart.subtotal)}</span>
+            <span className="inline-flex items-center gap-1">View cart <ArrowRight size={18} /></span>
+          </Link>
         </div>
       )}
 
-      {pendingItem && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '30px', maxWidth: '360px', textAlign: 'center' }}>
-            <h3 style={{ margin: '0 0 10px 0', color: '#282c3f' }}>Start a new cart?</h3>
-            <p style={{ color: '#7e808c', fontSize: '14px', margin: '0 0 20px 0' }}>Your cart has items from another restaurant. Adding this item will clear it and start a new order from {state?.name}.</p>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button onClick={() => setPendingItem(null)} style={{ flex: 1, padding: '10px', border: '1px solid #d4d5d9', borderRadius: '8px', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>Cancel</button>
-              <button onClick={confirmReplace} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '8px', backgroundColor: '#fc8019', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>Yes, start new</button>
-            </div>
-          </div>
-        </div>
-      )}
-      <h3 style={{ color: '#3d4152' }}>Recommended</h3>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {loading && items.length === 0 && <p style={{ color: '#7e808c' }}>Loading menu...</p>}
-        {items.map((item) => (
-          <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderBottom: '0.5px solid #d4d5d9' }}>
-            <div>
-              <span style={{ fontSize: '10px', border: '1px solid', borderColor: item.v ? '#0f8a65' : '#e43b4f', padding: '2px 4px', color: item.v ? '#0f8a65' : '#e43b4f', borderRadius: '4px', fontWeight: 'bold' }}>{item.v ? '● VEG' : '▲ NON-VEG'}</span>
-              <strong style={{ fontSize: '18px', display: 'block', marginTop: '8px', color: '#3d4152' }}>{item.name}</strong>
-              <span style={{ color: '#3e4152', fontWeight: '500' }}>₹{item.price}</span>
-            </div>
-            <button style={{ padding: '8px 32px', backgroundColor: '#fff', color: '#60b246', border: '1px solid #d4d5d9', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }} onClick={() => handleAdd(item)}>ADD</button>
-          </div>
-        ))}
-      </div>
+      <Modal
+        open={Boolean(pending)}
+        onClose={() => setPending(null)}
+        title="Start a new cart?"
+        footer={<>
+          <button className="btn-secondary flex-1" onClick={() => setPending(null)}>Keep current cart</button>
+          <button className="btn-primary flex-1" onClick={() => { cart.replaceWith(pending, restaurant); showToast(`New cart started with ${pending.name}`, 'info'); setPending(null); }}>Start new cart</button>
+        </>}
+      >
+        Your cart has items from <strong>{cart.restaurant?.name}</strong>. Adding this will clear it and start a new order from {restaurant.name}.
+      </Modal>
     </div>
   );
 };
+
 export default RestaurantMenu;

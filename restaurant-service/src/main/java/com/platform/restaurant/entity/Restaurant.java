@@ -22,12 +22,19 @@ public class Restaurant {
     private String city;
 
     private String address;
+    /** Neighbourhood shown on listings, e.g. "Koramangala". */
+    private String area;
 
     private Double rating;
 
     private Integer avgDeliveryTimeMinutes;
 
     private String imageUrl;
+    private Integer costForTwo;
+    /** Short promotional line shown on the listing card; blank when there is none. */
+    private String offer;
+    /** Pure-vegetarian kitchen. */
+    private Boolean veg = false;
 
     @Column(name = "is_open")
     private Boolean isOpen = true;

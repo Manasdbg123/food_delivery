@@ -1,34 +1,78 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { CalendarDays, MapPin, Users } from 'lucide-react';
+import { DINEOUT } from '../data/catalog';
+import { Modal, Rating, SmartImage } from '../components/ui';
+import { useToast } from '../context/ToastContext';
+import { inr } from '../lib/format';
+
+const SLOTS = ['7:00 PM', '7:30 PM', '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM'];
+const today = () => new Date().toISOString().slice(0, 10);
 
 const Dineout = () => {
-  const venues = [
-    { id: 1, name: "The Bier Library", area: "Koramangala", discount: "Flat 15% off on walk-in", img: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=500" },
-    { id: 2, name: "Windmills Craftworks", area: "Whitefield", discount: "10% off on food bill", img: "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?w=500" },
-    { id: 3, name: "Toit Brewpub", area: "Indiranagar", discount: "Complimentary Dessert", img: "https://images.unsplash.com/photo-1574096079513-d8259312b785?w=500" }
-  ];
+  const { showToast } = useToast();
+  const [venue, setVenue] = useState(null);
+  const [booking, setBooking] = useState({ date: today(), slot: SLOTS[2], guests: 2 });
+
+  const confirm = () => {
+    showToast(`Table for ${booking.guests} at ${venue.name} requested for ${booking.slot}`, 'success', 4000);
+    setVenue(null);
+  };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <div style={{ backgroundColor: '#2b1e16', color: 'white', padding: '40px', borderRadius: '16px', marginBottom: '40px' }}>
-        <h1 style={{ margin: '0 0 10px 0', fontSize: '36px' }}>Discover the best restaurants to dine out</h1>
-        <p style={{ fontSize: '18px', opacity: 0.8 }}>Book tables and get exclusive discounts.</p>
-      </div>
-      
-      <h2 style={{ color: '#282c3f', marginBottom: '20px' }}>Trending Dining Spots</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '30px' }}>
-        {venues.map((venue) => (
-          <div key={venue.id} style={{ border: '1px solid #e9e9eb', borderRadius: '16px', overflow: 'hidden', transition: 'transform 0.2s', cursor: 'pointer' }} onMouseOver={(e) => e.currentTarget.style.transform = 'scale(0.98)'} onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}>
-            <img src={venue.img} alt={venue.name} style={{ width: '100%', height: '200px', objectFit: 'cover' }} />
-            <div style={{ padding: '20px' }}>
-              <h3 style={{ margin: '0 0 5px 0', fontSize: '20px', color: '#3d4152' }}>{venue.name}</h3>
-              <p style={{ margin: '0 0 15px 0', color: '#686b78' }}>{venue.area}</p>
-              <div style={{ backgroundColor: '#f1f1f6', color: '#fc8019', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px', display: 'inline-block', marginBottom: '15px' }}>{venue.discount}</div>
-              <button style={{ width: '100%', padding: '12px', backgroundColor: '#fc8019', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>BOOK A TABLE</button>
+    <div className="container-page py-8">
+      <section className="relative overflow-hidden rounded-3xl bg-ink p-8 text-white sm:p-12">
+        <div className="absolute inset-0 opacity-30" style={{ background: 'radial-gradient(700px 300px at 90% 0%, #fc5a12, transparent 60%)' }} />
+        <div className="relative">
+          <p className="eyebrow text-brand-300">Dineout</p>
+          <h1 className="mt-2 max-w-xl text-4xl font-extrabold text-white">Book a table at the best places in town</h1>
+          <p className="mt-3 max-w-lg text-stone-300">Reserve ahead, skip the wait, and get an offer on the bill.</p>
+        </div>
+      </section>
+
+      <h2 className="mt-10 text-2xl font-extrabold">Trending dining spots</h2>
+      <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {DINEOUT.map((v) => (
+          <article key={v.id} className="card overflow-hidden">
+            <SmartImage src={v.imageUrl} alt={v.name} className="aspect-[16/10] w-full" />
+            <div className="p-5">
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-lg font-bold">{v.name}</h3>
+                <Rating value={v.rating} />
+              </div>
+              <p className="text-sm text-ink-muted">{v.cuisine} · {inr(v.costForTwo)} for two</p>
+              <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-muted"><MapPin size={14} /> {v.area}</p>
+              <p className="mt-4 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">{v.offer}</p>
+              <button className="btn-primary mt-4 w-full" onClick={() => setVenue(v)}>Book a table</button>
             </div>
-          </div>
+          </article>
         ))}
       </div>
+
+      <Modal
+        open={Boolean(venue)} onClose={() => setVenue(null)} title={venue ? `Book at ${venue.name}` : ''}
+        footer={<><button className="btn-secondary flex-1" onClick={() => setVenue(null)}>Cancel</button><button className="btn-primary flex-1" onClick={confirm}>Request booking</button></>}
+      >
+        <div className="grid gap-4">
+          <label><span className="label flex items-center gap-1.5"><CalendarDays size={14} /> Date</span>
+            <input type="date" className="input" min={today()} value={booking.date} onChange={(e) => setBooking({ ...booking, date: e.target.value })} />
+          </label>
+          <div>
+            <span className="label">Time</span>
+            <div className="grid grid-cols-3 gap-2">
+              {SLOTS.map((s) => (
+                <button key={s} type="button" onClick={() => setBooking({ ...booking, slot: s })} className={`chip justify-center ${booking.slot === s ? 'chip-active' : ''}`}>{s}</button>
+              ))}
+            </div>
+          </div>
+          <label><span className="label flex items-center gap-1.5"><Users size={14} /> Guests</span>
+            <select className="input" value={booking.guests} onChange={(e) => setBooking({ ...booking, guests: Number(e.target.value) })}>
+              {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} {i ? 'guests' : 'guest'}</option>)}
+            </select>
+          </label>
+        </div>
+      </Modal>
     </div>
   );
 };
+
 export default Dineout;

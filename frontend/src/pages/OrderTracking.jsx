@@ -1,95 +1,149 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { Bike, MapPin, Clock, ShieldCheck, Phone, CheckCircle2 } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { Bike, Check, ChefHat, CircleX, MapPin, PackageCheck, Receipt, Store } from 'lucide-react';
+import { CANCELLABLE, STATUSES, TERMINAL, cancelOrder, getOrder } from '../services/orders';
 import { useToast } from '../context/ToastContext';
+import { EmptyState, Modal, Notice, VegMark } from '../components/ui';
+import { clsx, inr, timeAgo } from '../lib/format';
+
+const ICONS = { CREATED: Receipt, ACCEPTED: Store, PREPARING: ChefHat, OUT_FOR_DELIVERY: Bike, DELIVERED: PackageCheck };
 
 const OrderTracking = () => {
-  const { state } = useLocation();
-  const navigate = useNavigate();
+  const { id } = useParams();
   const { showToast } = useToast();
-  const [step, setStep] = useState(1);
-  const [progress, setProgress] = useState(0);
+  const [order, setOrder] = useState(null);
+  const [error, setError] = useState('');
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
-  // Simulation loop mimicking real-time server events via WebSockets
+  const load = useCallback(() => getOrder(id).then(setOrder).catch((err) => setError(err.message)), [id]);
+
   useEffect(() => {
+    load();
     const timer = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          setStep((currentStep) => {
-            if (currentStep < 4) {
-              return currentStep + 1;
-            }
-            clearInterval(timer);
-            return currentStep;
-          });
-          return 0;
-        }
-        return prev + 5;
+      setOrder((current) => {
+        if (!current || !TERMINAL.has(current.status)) load();
+        return current;
       });
-    }, 400);
-
+    }, 4000);
     return () => clearInterval(timer);
-  }, []);
+  }, [load]);
 
-  const restaurantName = state?.restaurantName || "Selected Kitchen";
-  const orderTotal = state?.total || 299;
+  if (error && !order) {
+    return <EmptyState title="We couldn't find that order" action={<Link to="/profile?tab=orders" className="btn-primary">See your orders</Link>}>{error}</EmptyState>;
+  }
+  if (!order) {
+    return <div className="container-page max-w-3xl py-10"><div className="skeleton h-64 rounded-3xl" /></div>;
+  }
+
+  const failed = order.status === 'CANCELLED' || order.status === 'PAYMENT_FAILED';
+  const currentIndex = STATUSES.findIndex((s) => s.key === order.status);
+  const current = STATUSES[currentIndex];
+
+  const doCancel = async () => {
+    setCancelling(true);
+    try {
+      setOrder({ ...order, ...(await cancelOrder(order.id)) });
+      showToast('Your order was cancelled', 'info');
+    } catch (err) {
+      showToast(err.message || 'Could not cancel this order', 'error');
+    } finally {
+      setCancelling(false);
+      setConfirmCancel(false);
+    }
+  };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1100px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '30px' }}>
-        
-        {/* Left column: Status Indicators */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ backgroundColor: '#fff', padding: '24px', border: '1px solid #e9e9eb', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-            <span style={{ color: '#fc8019', fontSize: '13px', fontWeight: 'bold', letterSpacing: '1px' }}>LIVE ORDER TRACKING</span>
-            <h1 style={{ margin: '8px 0 2px 0', fontSize: '28px', color: '#282c3f' }}>
-              {step === 1 && "Accepting your order..."}
-              {step === 2 && "Kitchen is preparing your food..."}
-              {step === 3 && "Delivery executive is on the way..."}
-              {step === 4 && "Order delivered successfully!"}
-            </h1>
-            <p style={{ color: '#7e808c', fontSize: '14px', margin: '0 0 20px 0' }}>Arriving from {restaurantName}</p>
+    <div className="container-page max-w-3xl py-8">
+      <Link to="/profile?tab=orders" className="text-sm font-semibold text-ink-muted hover:text-ink">← All orders</Link>
 
-            {/* Stepper progress track */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', margin: '30px 0' }}>
-              <div style={{ position: 'absolute', top: '15px', left: '0', right: '0', height: '4px', backgroundColor: '#e9e9eb', zIndex: 1 }}>
-                <div style={{ width: `${((step - 1) * 33.3) + (progress * 0.333)}%`, height: '100%', backgroundColor: '#fc8019', transition: 'width 0.4s' }} />
-              </div>
-              <StepMilestone number={1} current={step} label="Confirmed" />
-              <StepMilestone number={2} current={step} label="Preparing" />
-              <StepMilestone number={3} current={step} label="Dispatched" />
-              <StepMilestone number={4} current={step} label="Arrived" />
-            </div>
+      <section className="card mt-4 overflow-hidden">
+        <div className={clsx('p-6 text-white', failed ? 'bg-stone-700' : order.status === 'DELIVERED' ? 'bg-emerald-600' : 'bg-ink')}>
+          <p className="eyebrow text-brand-300">{order.demo ? 'Demo order' : `Order #${order.id}`}</p>
+          <h1 className="mt-2 text-3xl font-extrabold text-white">
+            {order.status === 'CANCELLED' && 'Order cancelled'}
+            {order.status === 'PAYMENT_FAILED' && 'Payment failed'}
+            {!failed && current?.label}
+          </h1>
+          <p className="mt-1 text-stone-200">
+            {order.status === 'PAYMENT_FAILED' ? 'Your bank declined the payment. You have not been charged.' : failed ? 'Any amount paid is refunded to the original payment method.' : current?.detail}
+          </p>
+        </div>
+
+        {!failed && (
+          <ol className="grid grid-cols-5 gap-1 px-4 py-6 sm:px-6">
+            {STATUSES.map((s, i) => {
+              const Icon = ICONS[s.key];
+              const done = i < currentIndex || order.status === 'DELIVERED';
+              const active = i === currentIndex && order.status !== 'DELIVERED';
+              return (
+                <li key={s.key} className="relative flex flex-col items-center text-center">
+                  {i > 0 && <span className={clsx('absolute right-1/2 top-5 h-1 w-full -translate-y-1/2 rounded-full', i <= currentIndex ? 'bg-brand-500' : 'bg-stone-200')} />}
+                  <span className={clsx(
+                    'relative z-10 grid h-10 w-10 place-items-center rounded-full border-2 transition',
+                    done ? 'border-brand-500 bg-brand-500 text-white' : active ? 'border-brand-500 bg-white text-brand-600 ring-4 ring-brand-100' : 'border-stone-200 bg-white text-stone-400',
+                  )}>
+                    {done ? <Check size={18} strokeWidth={3} /> : <Icon size={18} />}
+                  </span>
+                  <span className={clsx('mt-2 text-xs font-semibold sm:text-sm', active ? 'text-ink' : 'text-ink-muted')}>{s.label}</span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+
+        {order.demo && (
+          <div className="px-6 pb-6"><Notice>The backend is not running, so this order lives in your browser and moves through the stages on a timer. With the backend up, status comes from order-service as payment and delivery events arrive.</Notice></div>
+        )}
+      </section>
+
+      <section className="card mt-6 p-6" aria-labelledby="receipt-title">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="receipt-title" className="text-lg font-bold">{order.restaurantName || 'Your order'}</h2>
+            <p className="text-sm text-ink-muted">Placed {timeAgo(order.createdAt)}{order.paymentMethod ? ` · ${order.paymentMethod === 'COD' ? 'Cash on delivery' : order.paymentMethod}` : ''}</p>
           </div>
-
-          {/* Delivery Partner Profile Card */}
-          {step >= 3 && (
-            <div style={{ backgroundColor: '#fff', padding: '20px', border: '1px solid #e9e9eb', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ backgroundColor: '#f1f1f6', padding: '12px', borderRadius: '50%' }}><Bike color='#fc8019' size={28} /></div>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '16px', color: '#282c3f' }}>Rohan Kumar</h4>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#7e808c' }}>Your delivery executive • Verified Professional</p>
-                </div>
-              </div>
-              <button onClick={() => showToast('Calling Rohan...', 'info')} style={{ padding: '10px 16px', backgroundColor: '#fff', border: '1px solid #fc8019', color: '#fc8019', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}><Phone size={16} /> Contact</button>
-            </div>
+          {CANCELLABLE.has(order.status) && (
+            <button className="btn-secondary text-red-600" onClick={() => setConfirmCancel(true)}><CircleX size={16} /> Cancel order</button>
           )}
         </div>
-      </div>
-    </div>
-  );
-};
 
-const StepMilestone = ({ number, current, label }) => {
-  const isDone = current > number;
-  const isCurrent = current === number;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, position: 'relative' }}>
-      <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: isDone || isCurrent ? '#fc8019' : '#fff', border: '2px solid', borderColor: isDone || isCurrent ? '#fc8019' : '#cbd5e1', color: isDone || isCurrent ? '#fff' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '14px' }}>
-        {isDone ? <CheckCircle2 size={16} /> : number}
-      </div>
-      <span style={{ fontSize: '12px', marginTop: '8px', fontWeight: isCurrent ? 'bold' : '500', color: isCurrent ? '#282c3f' : '#7e808c' }}>{label}</span>
+        {order.deliveryAddress && (
+          <p className="mt-4 flex items-start gap-2 text-sm text-ink-soft"><MapPin size={16} className="mt-0.5 shrink-0 text-brand-500" /> {order.deliveryAddress}</p>
+        )}
+
+        {order.items?.length > 0 && (
+          <ul className="mt-5 space-y-3 border-t border-stone-200 pt-5">
+            {order.items.map((item) => (
+              <li key={item.menuItemId} className="flex items-center gap-3 text-sm">
+                {item.isVeg !== undefined && <VegMark isVeg={item.isVeg} />}
+                <span className="flex-1">{item.name} <span className="text-ink-muted">× {item.quantity}</span></span>
+                <span className="tabular-nums">{inr(item.price * item.quantity)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-5 space-y-2 border-t border-stone-200 pt-5 text-sm">
+          {order.subtotal != null && <div className="flex justify-between text-ink-soft"><span>Item total</span><span>{inr(order.subtotal)}</span></div>}
+          {order.discount > 0 && <div className="flex justify-between text-emerald-700"><span>Discount{order.couponCode ? ` (${order.couponCode})` : ''}</span><span>− {inr(order.discount)}</span></div>}
+          {order.deliveryFee != null && <div className="flex justify-between text-ink-soft"><span>Delivery fee</span><span>{order.deliveryFee ? inr(order.deliveryFee) : 'Free'}</span></div>}
+          {order.gst != null && <div className="flex justify-between text-ink-soft"><span>Taxes and fees</span><span>{inr((order.gst || 0) + (order.platformFee || 0))}</span></div>}
+          <div className="flex justify-between text-base font-extrabold"><span>Total</span><span>{inr(order.totalAmount)}</span></div>
+        </div>
+      </section>
+
+      <Modal
+        open={confirmCancel}
+        onClose={() => setConfirmCancel(false)}
+        title="Cancel this order?"
+        footer={<>
+          <button className="btn-secondary flex-1" onClick={() => setConfirmCancel(false)}>Keep order</button>
+          <button className="btn-primary flex-1 bg-red-600 hover:bg-red-700" onClick={doCancel} disabled={cancelling}>{cancelling ? 'Cancelling…' : 'Yes, cancel'}</button>
+        </>}
+      >
+        The restaurant has not started cooking yet, so you can still cancel. Any amount paid is refunded.
+      </Modal>
     </div>
   );
 };

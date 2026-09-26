@@ -6,9 +6,19 @@ spring:
     name: notification-service
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    # Events travel as plain JSON maps. No type headers, so a consumer never needs the
+    # producer's Java classes on its classpath.
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
     consumer:
+      auto-offset-reset: earliest
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: java.util.HashMap
         spring.json.trusted.packages: "*"
 
 eureka:

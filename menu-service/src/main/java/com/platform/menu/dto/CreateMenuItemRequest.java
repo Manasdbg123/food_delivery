@@ -19,6 +19,7 @@ public record CreateMenuItemRequest(
 
         Boolean isVeg,
 
-        String imageUrl
+        String imageUrl,
+        String category
 ) {
 }

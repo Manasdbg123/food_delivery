@@ -1,41 +1,42 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import Logo from './Logo';
+import { CITIES } from '../data/catalog';
+
+const COLUMNS = [
+  { title: 'Company', links: [['About FoodieHub', '/support'], ['Offers', '/offers'], ['Dineout', '/dineout']] },
+  { title: 'Help', links: [['Help & support', '/support'], ['Your orders', '/profile?tab=orders'], ['Partner with us', '/support']] },
+];
 
 const Footer = () => (
-  <footer style={{ backgroundColor: '#02060c', color: '#fff', padding: '60px 0', marginTop: 'auto', fontFamily: 'sans-serif' }}>
-    <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '40px', padding: '0 20px' }}>
+  <footer className="mt-auto bg-ink text-stone-400">
+    <div className="container-page grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
       <div>
-        <div style={{ marginBottom: '20px' }}>
-          <Logo inverted size={26} />
+        <Logo inverted />
+        <p className="mt-4 max-w-xs text-sm">Food from the restaurants you love, delivered while it is still hot.</p>
+      </div>
+      {COLUMNS.map((col) => (
+        <div key={col.title}>
+          <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-white">{col.title}</h3>
+          <ul className="space-y-2.5 text-sm">
+            {col.links.map(([label, to]) => (
+              <li key={label}><Link to={to} className="hover:text-white">{label}</Link></li>
+            ))}
+          </ul>
         </div>
-        <p style={{ color: '#808080', fontSize: '14px' }}>© 2026 FoodieHub Technologies Pvt. Ltd</p>
-      </div>
+      ))}
       <div>
-        <h4 style={{ color: '#fff', marginBottom: '20px', fontSize: '18px' }}>Company</h4>
-        <ul style={{ listStyle: 'none', padding: 0, color: '#808080', fontSize: '15px', lineHeight: '2.5', cursor: 'pointer' }}>
-          <li onMouseOver={(e) => e.target.style.color = '#fff'} onMouseOut={(e) => e.target.style.color = '#808080'}>About Us</li>
-          <li onMouseOver={(e) => e.target.style.color = '#fff'} onMouseOut={(e) => e.target.style.color = '#808080'}>Careers</li>
-          <li onMouseOver={(e) => e.target.style.color = '#fff'} onMouseOut={(e) => e.target.style.color = '#808080'}>Team</li>
-          <li onMouseOver={(e) => e.target.style.color = '#fff'} onMouseOut={(e) => e.target.style.color = '#808080'}>FoodieHub Plus</li>
-        </ul>
+        <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-white">We deliver to</h3>
+        <ul className="space-y-2.5 text-sm">{CITIES.map((c) => <li key={c}>{c}</li>)}</ul>
       </div>
-      <div>
-        <h4 style={{ color: '#fff', marginBottom: '20px', fontSize: '18px' }}>Contact us</h4>
-        <ul style={{ listStyle: 'none', padding: 0, color: '#808080', fontSize: '15px', lineHeight: '2.5', cursor: 'pointer' }}>
-          <li onMouseOver={(e) => e.target.style.color = '#fff'} onMouseOut={(e) => e.target.style.color = '#808080'}>Help & Support</li>
-          <li onMouseOver={(e) => e.target.style.color = '#fff'} onMouseOut={(e) => e.target.style.color = '#808080'}>Partner with us</li>
-          <li onMouseOver={(e) => e.target.style.color = '#fff'} onMouseOut={(e) => e.target.style.color = '#808080'}>Ride with us</li>
-        </ul>
-      </div>
-      <div>
-        <h4 style={{ color: '#fff', marginBottom: '20px', fontSize: '18px' }}>Legal</h4>
-        <ul style={{ listStyle: 'none', padding: 0, color: '#808080', fontSize: '15px', lineHeight: '2.5', cursor: 'pointer' }}>
-          <li onMouseOver={(e) => e.target.style.color = '#fff'} onMouseOut={(e) => e.target.style.color = '#808080'}>Terms & Conditions</li>
-          <li onMouseOver={(e) => e.target.style.color = '#fff'} onMouseOut={(e) => e.target.style.color = '#808080'}>Cookie Policy</li>
-          <li onMouseOver={(e) => e.target.style.color = '#fff'} onMouseOut={(e) => e.target.style.color = '#808080'}>Privacy Policy</li>
-        </ul>
+    </div>
+    <div className="border-t border-white/10">
+      <div className="container-page flex flex-col gap-2 py-5 text-xs sm:flex-row sm:justify-between">
+        <span>© {new Date().getFullYear()} FoodieHub. A portfolio project.</span>
+        <span>Prices include applicable taxes at checkout.</span>
       </div>
     </div>
   </footer>
 );
+
 export default Footer;

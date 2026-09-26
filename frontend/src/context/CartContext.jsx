@@ -1,92 +1,84 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { findCoupon, priceBill } from '../lib/pricing';
 
-const CartContext = createContext();
-
+const CartContext = createContext(null);
 export const useCart = () => useContext(CartContext);
 
-const STORAGE_KEY = 'foodiehub_cart';
+const STORAGE_KEY = 'foodiehub_cart_v2';
+const EMPTY = { restaurant: null, items: [], couponCode: '' };
 
-const readStoredCart = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : { restaurantId: null, restaurantName: null, items: [] };
-  } catch {
-    return { restaurantId: null, restaurantName: null, items: [] };
-  }
+const readStored = () => {
+  try { return { ...EMPTY, ...JSON.parse(localStorage.getItem(STORAGE_KEY)) }; } catch { return EMPTY; }
 };
 
 export const CartProvider = ({ children }) => {
-  const [restaurantId, setRestaurantId] = useState(() => readStoredCart().restaurantId);
-  const [restaurantName, setRestaurantName] = useState(() => readStoredCart().restaurantName);
-  const [items, setItems] = useState(() => readStoredCart().items);
+  const [state, setState] = useState(readStored);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ restaurantId, restaurantName, items }));
-  }, [restaurantId, restaurantName, items]);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
+  }, [state]);
 
-  // Returns 'added' | 'conflict' — caller decides how to surface a conflict
-  const addToCart = (item, fromRestaurantId, fromRestaurantName) => {
-    if (restaurantId && fromRestaurantId && restaurantId !== fromRestaurantId && items.length > 0) {
-      return 'conflict';
-    }
-    setRestaurantId(fromRestaurantId ?? restaurantId);
-    setRestaurantName(fromRestaurantName ?? restaurantName);
-    setItems((prev) => {
-      const existing = prev.find((i) => i.id === item.id);
-      if (existing) {
-        return prev.map((i) => (i.id === item.id ? { ...i, qty: i.qty + 1 } : i));
-      }
-      return [...prev, { ...item, qty: 1 }];
-    });
-    return 'added';
-  };
+  const api = useMemo(() => {
+    const { restaurant, items, couponCode } = state;
+    const subtotal = items.reduce((sum, i) => sum + i.qty * i.price, 0);
+    const itemCount = items.reduce((sum, i) => sum + i.qty, 0);
 
-  const replaceCart = (item, fromRestaurantId, fromRestaurantName) => {
-    setRestaurantId(fromRestaurantId);
-    setRestaurantName(fromRestaurantName);
-    setItems([{ ...item, qty: 1 }]);
-  };
+    return {
+      restaurant,
+      items,
+      itemCount,
+      subtotal,
+      couponCode,
+      bill: priceBill(subtotal, findCoupon(couponCode)),
+      quantityOf: (itemId) => items.find((i) => i.id === itemId)?.qty || 0,
 
-  const updateQty = (itemId, delta) => {
-    setItems((prev) => {
-      const next = prev
-        .map((i) => (i.id === itemId ? { ...i, qty: i.qty + delta } : i))
-        .filter((i) => i.qty > 0);
-      if (next.length === 0) {
-        setRestaurantId(null);
-        setRestaurantName(null);
-      }
-      return next;
-    });
-  };
+      // Returns 'added', or 'conflict' when the cart holds another restaurant's items.
+      add(item, fromRestaurant) {
+        if (restaurant && items.length && restaurant.id !== fromRestaurant.id) return 'conflict';
+        setState((prev) => {
+          const existing = prev.items.find((i) => i.id === item.id);
+          return {
+            ...prev,
+            restaurant: pickRestaurant(fromRestaurant),
+            items: existing
+              ? prev.items.map((i) => (i.id === item.id ? { ...i, qty: i.qty + 1 } : i))
+              : [...prev.items, { id: item.id, name: item.name, price: item.price, isVeg: item.isVeg, qty: 1 }],
+          };
+        });
+        return 'added';
+      },
+      replaceWith(item, fromRestaurant) {
+        setState({
+          restaurant: pickRestaurant(fromRestaurant),
+          items: [{ id: item.id, name: item.name, price: item.price, isVeg: item.isVeg, qty: 1 }],
+          couponCode: '',
+        });
+      },
+      setQty(itemId, qty) {
+        setState((prev) => {
+          const next = prev.items
+            .map((i) => (i.id === itemId ? { ...i, qty: Math.max(0, Math.min(20, qty)) } : i))
+            .filter((i) => i.qty > 0);
+          return next.length ? { ...prev, items: next } : EMPTY;
+        });
+      },
+      // Load a whole previous order at once (reorder), replacing whatever is in the cart.
+      loadOrder(fromRestaurant, orderItems) {
+        setState({
+          restaurant: pickRestaurant(fromRestaurant),
+          items: orderItems.map((i) => ({ id: i.id, name: i.name, price: i.price, isVeg: i.isVeg, qty: Math.max(1, Math.min(20, i.qty)) })),
+          couponCode: '',
+        });
+      },
+      applyCoupon: (code) => setState((prev) => ({ ...prev, couponCode: (code || '').trim().toUpperCase() })),
+      clear: () => setState(EMPTY),
+    };
+  }, [state]);
 
-  const removeItem = (itemId) => updateQty(itemId, -Infinity);
-
-  const clearCart = () => {
-    setItems([]);
-    setRestaurantId(null);
-    setRestaurantName(null);
-  };
-
-  const itemCount = items.reduce((sum, i) => sum + i.qty, 0);
-  const subtotal = items.reduce((sum, i) => sum + i.qty * i.price, 0);
-
-  return (
-    <CartContext.Provider
-      value={{
-        cart: items,
-        restaurantId,
-        restaurantName,
-        itemCount,
-        subtotal,
-        addToCart,
-        replaceCart,
-        updateQty,
-        removeItem,
-        clearCart,
-      }}
-    >
-      {children}
-    </CartContext.Provider>
-  );
+  return <CartContext.Provider value={api}>{children}</CartContext.Provider>;
 };
+
+const pickRestaurant = (r) => ({
+  id: r.id, name: r.name, area: r.area, city: r.city, imageUrl: r.imageUrl,
+  avgDeliveryTimeMinutes: r.avgDeliveryTimeMinutes,
+});

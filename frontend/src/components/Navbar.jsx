@@ -1,97 +1,156 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Percent, HelpCircle, User, ShoppingCart, ChevronDown, MapPin, LogOut, Menu, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { ChevronDown, HelpCircle, LogOut, MapPin, Menu, Percent, Search, ShoppingBag, User, UtensilsCrossed, X, Receipt } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useLocationState } from '../context/LocationContext';
 import { useAuth } from '../context/AuthContext';
 import Logo from './Logo';
+import { clsx } from '../lib/format';
+
+const LINKS = [
+  { to: '/search', label: 'Search', icon: Search },
+  { to: '/offers', label: 'Offers', icon: Percent },
+  { to: '/dineout', label: 'Dineout', icon: UtensilsCrossed },
+  { to: '/support', label: 'Help', icon: HelpCircle },
+];
+
+const useClickOutside = (ref, onOutside) => {
+  useEffect(() => {
+    const handler = (e) => ref.current && !ref.current.contains(e.target) && onOutside();
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [ref, onOutside]);
+};
 
 const Navbar = () => {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { itemCount } = useCart();
-  const { city, setCity } = useLocationState();
-  const { isAuthenticated, logout } = useAuth();
-  const [showLoc, setShowLoc] = useState(false);
+  const { city, setCity, cities } = useLocationState();
+  const { isAuthenticated, user, logout } = useAuth();
+  const [cityOpen, setCityOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  const cities = ['Bangalore', 'Mumbai', 'Delhi', 'Hyderabad', 'Chennai'];
+  const cityRef = useRef(null);
+  const accountRef = useRef(null);
+  useClickOutside(cityRef, () => setCityOpen(false));
+  useClickOutside(accountRef, () => setAccountOpen(false));
+  useEffect(() => { setMobileOpen(false); setAccountOpen(false); }, [pathname]);
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/');
   };
 
-  const navLinks = [
-    { label: 'Search', icon: <Search size={18} />, to: '/search' },
-    { label: 'Offers', icon: <Percent size={18} />, to: '/offers' },
-    { label: 'Help', icon: <HelpCircle size={18} />, to: '/support' },
-    { label: 'Account', icon: <User size={18} />, to: '/profile' },
-  ];
+  const linkClass = ({ isActive }) => clsx(
+    'inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition',
+    isActive ? 'text-brand-600' : 'text-ink-soft hover:text-ink',
+  );
 
   return (
-    <header style={{ boxShadow: '0 15px 40px -20px rgba(40,44,63,.15)', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1000 }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', height: '80px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '30px' }}>
-          <div onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
-            <Logo />
-          </div>
-          <div style={{ position: 'relative' }} className="hidden md:block">
-            <div onClick={() => setShowLoc(!showLoc)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}>
-              <span style={{ fontWeight: 'bold', color: '#3d4152', borderBottom: '2px solid #3d4152' }}>Home</span>
-              <span style={{ color: '#686b78', marginLeft: '5px' }}>{city}</span> <ChevronDown size={16} color="#fc8019" />
-            </div>
-            {showLoc && (
-              <div style={{ position: 'absolute', top: '40px', left: 0, background: 'white', padding: '10px', border: '1px solid #e9e9eb', borderRadius: '12px', boxShadow: '0 10px 20px rgba(0,0,0,0.1)', width: '200px' }}>
-                <h4 style={{ margin: '0 0 10px 5px', color: '#7e808c', fontSize: '12px' }}>SELECT CITY</h4>
-                {cities.map(c => (
-                  <div key={c} onClick={() => { setCity(c); setShowLoc(false); navigate('/dashboard'); }} style={{ padding: '10px', cursor: 'pointer', borderRadius: '8px', color: city === c ? '#fc8019' : '#3d4152', fontWeight: city === c ? 'bold' : 'normal' }}>
-                    <MapPin size={14} style={{ marginRight: '8px', display: 'inline' }} /> {c}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+    <header className="sticky top-0 z-[1000] border-b border-stone-200/80 bg-white/90 backdrop-blur-md">
+      <div className="container-page flex h-16 items-center gap-4">
+        <Link to="/" aria-label="FoodieHub home"><Logo /></Link>
 
-        <div className="hidden md:flex" style={{ gap: '35px', fontSize: '16px', fontWeight: '500', color: '#3d4152' }}>
-          {navLinks.map((link) => (
-            <div key={link.to} onClick={() => navigate(link.to)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {link.icon} {link.label}
-            </div>
-          ))}
-          <div onClick={() => navigate('/cart')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ShoppingCart size={18} /> Cart {itemCount > 0 && <span style={{ backgroundColor: '#60b246', color: 'white', padding: '2px 6px', borderRadius: '50%', fontSize: '12px' }}>{itemCount}</span>}
-          </div>
-          {isAuthenticated && (
-            <div onClick={handleLogout} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#e43b4f' }}>
-              <LogOut size={18} /> Logout
-            </div>
+        <div ref={cityRef} className="relative hidden sm:block">
+          <button
+            onClick={() => setCityOpen((o) => !o)}
+            className="flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-sm hover:bg-stone-100"
+            aria-haspopup="listbox" aria-expanded={cityOpen}
+          >
+            <MapPin size={16} className="text-brand-500" />
+            <span className="font-bold text-ink">{city}</span>
+            <ChevronDown size={16} className={clsx('text-ink-muted transition', cityOpen && 'rotate-180')} />
+          </button>
+          {cityOpen && (
+            <ul role="listbox" className="absolute left-0 top-12 w-56 animate-fade-up rounded-2xl border border-stone-200 bg-white p-1.5 shadow-lift">
+              <li className="px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wider text-ink-muted">Deliver to</li>
+              {cities.map((c) => (
+                <li key={c}>
+                  <button
+                    role="option" aria-selected={city === c}
+                    onClick={() => { setCity(c); setCityOpen(false); navigate('/'); }}
+                    className={clsx('flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm', city === c ? 'bg-brand-50 font-bold text-brand-700' : 'hover:bg-stone-50')}
+                  >
+                    <MapPin size={14} /> {c}
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
-        <button className="md:hidden" onClick={() => setMobileOpen(!mobileOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-          {mobileOpen ? <X size={26} /> : <Menu size={26} />}
-        </button>
+        <nav className="ml-auto hidden items-center gap-1 md:flex" aria-label="Main">
+          {LINKS.map(({ to, label, icon: Icon }) => (
+            <NavLink key={to} to={to} className={linkClass}><Icon size={17} /> {label}</NavLink>
+          ))}
+        </nav>
+
+        <div className="ml-auto flex items-center gap-1 md:ml-2">
+          <NavLink to="/cart" className={linkClass} aria-label={`Cart, ${itemCount} items`}>
+            <span className="relative">
+              <ShoppingBag size={19} />
+              {itemCount > 0 && (
+                <span className="absolute -right-2 -top-2 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-emerald-600 px-1 text-[11px] font-bold text-white">{itemCount}</span>
+              )}
+            </span>
+            <span className="hidden lg:inline">Cart</span>
+          </NavLink>
+
+          {isAuthenticated ? (
+            <div ref={accountRef} className="relative hidden md:block">
+              <button onClick={() => setAccountOpen((o) => !o)} className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-stone-100" aria-haspopup="menu" aria-expanded={accountOpen}>
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-ink text-sm font-bold text-white">
+                  {(user?.firstName || user?.email || '?').charAt(0).toUpperCase()}
+                </span>
+                <ChevronDown size={16} className="text-ink-muted" />
+              </button>
+              {accountOpen && (
+                <div role="menu" className="absolute right-0 top-12 w-60 animate-fade-up rounded-2xl border border-stone-200 bg-white p-1.5 shadow-lift">
+                  <div className="px-3 py-2.5">
+                    <p className="truncate font-bold">{user?.firstName ? `${user.firstName} ${user.lastName || ''}` : 'Your account'}</p>
+                    <p className="truncate text-sm text-ink-muted">{user?.email}</p>
+                  </div>
+                  <Link role="menuitem" to="/profile" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-stone-50"><User size={16} /> Profile</Link>
+                  <Link role="menuitem" to="/profile?tab=orders" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-stone-50"><Receipt size={16} /> Orders</Link>
+                  <button role="menuitem" onClick={handleLogout} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-red-600 hover:bg-red-50"><LogOut size={16} /> Sign out</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Link to="/login" state={{ from: { pathname } }} className="btn-primary ml-1 hidden md:inline-flex">Sign in</Link>
+          )}
+
+          <button className="rounded-xl p-2 hover:bg-stone-100 md:hidden" onClick={() => setMobileOpen((o) => !o)} aria-label="Menu" aria-expanded={mobileOpen}>
+            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+        </div>
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden" style={{ borderTop: '1px solid #e9e9eb', padding: '10px 20px 20px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {navLinks.map((link) => (
-            <div key={link.to} onClick={() => { navigate(link.to); setMobileOpen(false); }} style={{ padding: '12px 4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', color: '#3d4152', fontWeight: 500 }}>
-              {link.icon} {link.label}
+        <div className="animate-fade-up border-t border-stone-200 bg-white md:hidden">
+          <div className="container-page flex flex-col gap-1 py-3">
+            <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
+              {cities.map((c) => (
+                <button key={c} onClick={() => { setCity(c); navigate('/'); }} className={clsx('chip', city === c && 'chip-active')}>{c}</button>
+              ))}
             </div>
-          ))}
-          <div onClick={() => { navigate('/cart'); setMobileOpen(false); }} style={{ padding: '12px 4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', color: '#3d4152', fontWeight: 500 }}>
-            <ShoppingCart size={18} /> Cart {itemCount > 0 && `(${itemCount})`}
+            {LINKS.map(({ to, label, icon: Icon }) => (
+              <NavLink key={to} to={to} className={linkClass}><Icon size={18} /> {label}</NavLink>
+            ))}
+            {isAuthenticated ? (
+              <>
+                <NavLink to="/profile" className={linkClass}><User size={18} /> Profile & orders</NavLink>
+                <button onClick={handleLogout} className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-red-600"><LogOut size={18} /> Sign out</button>
+              </>
+            ) : (
+              <Link to="/login" className="btn-primary mt-2">Sign in</Link>
+            )}
           </div>
-          {isAuthenticated && (
-            <div onClick={handleLogout} style={{ padding: '12px 4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', color: '#e43b4f', fontWeight: 500 }}>
-              <LogOut size={18} /> Logout
-            </div>
-          )}
         </div>
       )}
     </header>
   );
 };
+
 export default Navbar;

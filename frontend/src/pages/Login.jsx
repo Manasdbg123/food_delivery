@@ -1,65 +1,78 @@
-import { useState } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import Logo from '../components/Logo';
+import { api } from '../lib/api';
+import { demoToken } from '../lib/demoSession';
+import AuthLayout from './AuthLayout';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [form, setForm] = useState({ email: '', password: '' });
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [offline, setOffline] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
   const { showToast } = useToast();
+  const next = location.state?.from?.pathname || '/';
 
-  const handleLogin = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        login(data.token, data.user ?? { email });
-        showToast('Welcome back!', 'success');
-        navigate(location.state?.from?.pathname || '/dashboard', { replace: true });
-      } else {
-        setError('Invalid credentials. Please try again.');
-      }
+      const data = await api('/auth/login', { method: 'POST', body: form, auth: false });
+      login(data.token, data.user || { email: form.email });
+      showToast(`Welcome back${data.user?.firstName ? `, ${data.user.firstName}` : ''}!`, 'success');
+      navigate(next, { replace: true });
     } catch (err) {
-      setError('Backend is offline. Please try again later.');
+      setOffline(Boolean(err.offline));
+      setError(err.status === 401 ? 'That email and password do not match.' : err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const tryDemo = () => {
+    login(demoToken(), { firstName: 'Demo', lastName: 'User', email: 'demo@foodiehub.example', demo: true });
+    showToast('Signed in to the demo. Orders stay in this browser.', 'info', 4000);
+    navigate(next, { replace: true });
+  };
+
   return (
-    <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-xl shadow-md">
-      <div className="flex justify-center mb-6"><Logo /></div>
-      <h2 className="text-2xl font-bold text-center mb-6">Welcome Back</h2>
-      {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">{error}</div>}
-      <form onSubmit={handleLogin} className="space-y-4">
-        <div>
-          <label className="block text-gray-700 text-sm font-bold mb-2">Email</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-orange-500" />
-        </div>
-        <div>
-          <label className="block text-gray-700 text-sm font-bold mb-2">Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-orange-500" />
-        </div>
-        <button type="submit" disabled={loading} className="w-full bg-orange-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-700 disabled:opacity-60">
-          {loading ? 'Signing in...' : 'Secure Login'}
-        </button>
+    <AuthLayout
+      title="Welcome back"
+      subtitle="Sign in to order, track deliveries and see past orders."
+      footer={<>New to FoodieHub? <Link to="/register" state={location.state} className="font-bold text-brand-600">Create an account</Link></>}
+    >
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        {error && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{error}</p>}
+        <label className="block">
+          <span className="label">Email</span>
+          <input id="login-email" type="email" required autoComplete="email" className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+        </label>
+        <label className="block">
+          <span className="label">Password</span>
+          <span className="relative block">
+            <input id="login-password" type={showPassword ? 'text' : 'password'} required autoComplete="current-password" className="input pr-11" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <button type="button" onClick={() => setShowPassword((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </span>
+        </label>
+        <button className="btn-primary btn-lg w-full" disabled={loading || !form.email || !form.password}>{loading ? 'Signing in…' : 'Sign in'}</button>
       </form>
-      <p className="text-center text-sm text-gray-600 mt-6">
-        New here? <Link to="/register" className="text-orange-600 font-bold">Create an account</Link>
-      </p>
-    </div>
+
+      {offline && (
+        <div className="mt-6 rounded-2xl border border-stone-200 bg-stone-50 p-4 text-sm">
+          <p className="font-semibold">The server is not running.</p>
+          <p className="mt-1 text-ink-muted">You can still try the whole app with a demo account. Orders are kept in this browser only.</p>
+          <button className="btn-secondary mt-3 w-full" onClick={tryDemo}>Continue with the demo account</button>
+        </div>
+      )}
+    </AuthLayout>
   );
 }

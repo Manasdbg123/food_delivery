@@ -4,9 +4,9 @@ import com.platform.menu.dto.CreateMenuItemRequest;
 import com.platform.menu.entity.MenuItem;
 import com.platform.menu.exception.ResourceNotFoundException;
 import com.platform.menu.repository.MenuItemRepository;
+import com.platform.menu.service.MenuQueryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,11 +19,11 @@ import java.util.List;
 public class MenuController {
 
     private final MenuItemRepository repository;
+    private final MenuQueryService menus;
 
     @GetMapping("/restaurant/{restaurantId}")
-    @Cacheable(value = "menus", key = "#restaurantId")
     public ResponseEntity<List<MenuItem>> getMenuForRestaurant(@PathVariable Long restaurantId) {
-        return ResponseEntity.ok(repository.findByRestaurantIdAndIsAvailableTrue(restaurantId));
+        return ResponseEntity.ok(menus.availableItems(restaurantId));
     }
 
     @GetMapping("/{id}")
@@ -42,8 +42,8 @@ public class MenuController {
         item.setPrice(request.price());
         item.setIsVeg(request.isVeg() != null ? request.isVeg() : true);
         item.setImageUrl(request.imageUrl());
+        item.setCategory(request.category());
         item.setIsAvailable(true);
-        MenuItem saved = repository.save(item);
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        return ResponseEntity.status(HttpStatus.CREATED).body(menus.save(item));
     }
 }

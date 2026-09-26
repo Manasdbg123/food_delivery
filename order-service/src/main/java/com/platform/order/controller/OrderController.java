@@ -2,8 +2,6 @@ package com.platform.order.controller;
 
 import com.platform.order.dto.PlaceOrderRequest;
 import com.platform.order.entity.Order;
-import com.platform.order.exception.ResourceNotFoundException;
-import com.platform.order.repository.OrderRepository;
 import com.platform.order.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,33 +11,37 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * Orders belong to the caller identified by X-User-Id, which the gateway sets from the
+ * verified JWT and strips from client requests. Every read and write is scoped to it.
+ */
 @RestController
 @RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
 public class OrderController {
 
+    private static final String USER = "X-User-Id";
+
     private final OrderService orderService;
-    private final OrderRepository orderRepository;
 
     @PostMapping
-    public ResponseEntity<Order> placeOrder(@Valid @RequestBody PlaceOrderRequest request) {
-        Order order = new Order();
-        order.setUserId(request.userId());
-        order.setRestaurantId(request.restaurantId());
-        order.setTotalAmount(request.totalAmount());
-        Order placed = orderService.placeOrder(order);
-        return ResponseEntity.status(HttpStatus.CREATED).body(placed);
+    public ResponseEntity<Order> placeOrder(@RequestHeader(USER) String userId,
+                                            @Valid @RequestBody PlaceOrderRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(orderService.placeOrder(userId, request));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<List<Order>> myOrders(@RequestHeader(USER) String userId) {
+        return ResponseEntity.ok(orderService.ordersForUser(userId));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Order> getOrder(@PathVariable Long id) {
-        Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
-        return ResponseEntity.ok(order);
+    public ResponseEntity<Order> getOrder(@RequestHeader(USER) String userId, @PathVariable Long id) {
+        return ResponseEntity.ok(orderService.getForUser(userId, id));
     }
 
-    @GetMapping("/user/{userId}")
-    public ResponseEntity<List<Order>> getOrdersForUser(@PathVariable String userId) {
-        return ResponseEntity.ok(orderRepository.findByUserId(userId));
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<Order> cancel(@RequestHeader(USER) String userId, @PathVariable Long id) {
+        return ResponseEntity.ok(orderService.cancel(userId, id));
     }
 }
