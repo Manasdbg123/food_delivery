@@ -35,6 +35,19 @@ class RouteAccessTest {
     }
 
     @Test
+    void stripeCanReachTheWebhookButPaymentsOtherwiseNeedAToken() {
+        assertTrue(RouteAccess.isPublic(HttpMethod.POST, "/api/v1/payments/webhook"));
+        assertFalse(RouteAccess.isPublic(HttpMethod.POST, "/api/v1/payments/checkout"));
+        assertFalse(RouteAccess.isPublic(HttpMethod.GET, "/api/v1/payments/order/7"));
+        assertFalse(RouteAccess.isPublic(HttpMethod.POST, "/api/v1/payments/webhookX"));
+    }
+
+    @Test
+    void corsPreflightNeedsNoToken() {
+        assertTrue(RouteAccess.isPublic(HttpMethod.OPTIONS, "/api/v1/orders"));
+    }
+
+    @Test
     void aPublicPathEmbeddedInAnotherPathDoesNotBypassAuth() {
         // The previous filter used String.contains, which let this through.
         assertFalse(RouteAccess.isPublic(HttpMethod.GET, "/api/v1/orders/1/api/v1/auth/login"));

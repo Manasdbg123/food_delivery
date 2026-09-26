@@ -5,6 +5,15 @@ spring:
     name: api-gateway
   cloud:
     gateway:
+      # Only needed when the storefront is served from a different origin than the API
+      # (for example the frontend on Vercel). Behind the bundled nginx it is same-origin.
+      globalcors:
+        cors-configurations:
+          '[/api/**]':
+            allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+            allowed-methods: [GET, POST, PUT, DELETE, OPTIONS]
+            allowed-headers: [Authorization, Content-Type, Accept]
+            max-age: 3600
       discovery:
         locator:
           enabled: true
@@ -45,5 +54,22 @@ eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_URI:http://localhost:8761/eureka/}
+# Base64-encoded HMAC key, at least 256 bits. Must match auth-service. There is no
+# default outside the local profile, so a deployment cannot start with a public key.
+jwt:
+  secret: ${JWT_SECRET}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+# Development key for local runs only. Never use it in a deployment.
 jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}

@@ -1,20 +1,25 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { Bike, Check, ChefHat, CircleX, MapPin, PackageCheck, Receipt, Store } from 'lucide-react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Bike, Check, ChefHat, CircleX, CreditCard, MapPin, PackageCheck, Receipt, Store } from 'lucide-react';
 import { CANCELLABLE, STATUSES, TERMINAL, cancelOrder, getOrder } from '../services/orders';
+import { payForOrder } from '../services/payments';
 import { useToast } from '../context/ToastContext';
 import { EmptyState, Modal, Notice, VegMark } from '../components/ui';
 import { clsx, inr, timeAgo } from '../lib/format';
 
 const ICONS = { CREATED: Receipt, ACCEPTED: Store, PREPARING: ChefHat, OUT_FOR_DELIVERY: Bike, DELIVERED: PackageCheck };
+const METHOD_LABELS = { COD: 'Cash on delivery', CARD: 'Card', UPI: 'UPI' };
 
 const OrderTracking = () => {
   const { id } = useParams();
+  const [params] = useSearchParams();
+  const returnedFrom = params.get('payment'); // 'success' or 'cancelled' after Stripe Checkout
   const { showToast } = useToast();
   const [order, setOrder] = useState(null);
   const [error, setError] = useState('');
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   const load = useCallback(() => getOrder(id).then(setOrder).catch((err) => setError(err.message)), [id]);
 
@@ -39,6 +44,23 @@ const OrderTracking = () => {
   const failed = order.status === 'CANCELLED' || order.status === 'PAYMENT_FAILED';
   const currentIndex = STATUSES.findIndex((s) => s.key === order.status);
   const current = STATUSES[currentIndex];
+  // A live online order stays CREATED until payment-service confirms the payment.
+  const awaitingPayment = !order.demo && order.status === 'CREATED' && order.paymentMethod && order.paymentMethod !== 'COD';
+  const confirming = awaitingPayment && returnedFrom === 'success';
+
+  const doPay = async () => {
+    setPaying(true);
+    try {
+      if (!(await payForOrder(order.id))) {
+        showToast('Payment received. Confirming your order…', 'success');
+        load();
+        setPaying(false);
+      }
+    } catch (err) {
+      showToast(err.message || 'Could not open the payment page', 'error');
+      setPaying(false);
+    }
+  };
 
   const doCancel = async () => {
     setCancelling(true);
@@ -66,8 +88,17 @@ const OrderTracking = () => {
             {!failed && current?.label}
           </h1>
           <p className="mt-1 text-stone-200">
-            {order.status === 'PAYMENT_FAILED' ? 'Your bank declined the payment. You have not been charged.' : failed ? 'Any amount paid is refunded to the original payment method.' : current?.detail}
+            {order.status === 'PAYMENT_FAILED' ? 'The payment did not go through, so you have not been charged.'
+              : failed ? 'Any amount paid is refunded to the original payment method.'
+                : confirming ? 'Payment received. Waiting for the bank to confirm it.'
+                  : awaitingPayment ? 'Waiting for your payment. The restaurant starts cooking once it is confirmed.'
+                    : current?.detail}
           </p>
+          {awaitingPayment && !confirming && (
+            <button className="btn-primary mt-4" onClick={doPay} disabled={paying}>
+              <CreditCard size={16} /> {paying ? 'Opening payment…' : `Pay now · ${inr(order.totalAmount)}`}
+            </button>
+          )}
         </div>
 
         {!failed && (
@@ -92,6 +123,10 @@ const OrderTracking = () => {
           </ol>
         )}
 
+        {awaitingPayment && returnedFrom === 'cancelled' && (
+          <div className="px-6 pb-6"><Notice tone="warn">You left the payment page before paying. Your order is saved: pay now, or cancel it below.</Notice></div>
+        )}
+
         {order.demo && (
           <div className="px-6 pb-6"><Notice>The backend is not running, so this order lives in your browser and moves through the stages on a timer. With the backend up, status comes from order-service as payment and delivery events arrive.</Notice></div>
         )}
@@ -101,7 +136,7 @@ const OrderTracking = () => {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 id="receipt-title" className="text-lg font-bold">{order.restaurantName || 'Your order'}</h2>
-            <p className="text-sm text-ink-muted">Placed {timeAgo(order.createdAt)}{order.paymentMethod ? ` · ${order.paymentMethod === 'COD' ? 'Cash on delivery' : order.paymentMethod}` : ''}</p>
+            <p className="text-sm text-ink-muted">Placed {timeAgo(order.createdAt)}{order.paymentMethod ? ` · ${METHOD_LABELS[order.paymentMethod] || order.paymentMethod}` : ''}</p>
           </div>
           {CANCELLABLE.has(order.status) && (
             <button className="btn-secondary text-red-600" onClick={() => setConfirmCancel(true)}><CircleX size={16} /> Cancel order</button>
